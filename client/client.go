@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/smtp"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
@@ -19,6 +20,7 @@ import (
 	"github.com/TwiN/whois"
 	"github.com/ishidawataru/sctp"
 	"github.com/miekg/dns"
+	"github.com/nbd-wtf/go-nostr"
 	ping "github.com/prometheus-community/pro-bing"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/net/websocket"
@@ -318,6 +320,70 @@ func Ping(address string, config *Config) (bool, time.Duration) {
 		return true, pinger.Statistics().MaxRtt
 	}
 	return true, 0
+}
+
+func QueryNostrEvent(address, body string, config *Config) (connected bool, response []byte, err error) {
+	const (
+		Origin             = "http://localhost/"
+		MaximumMessageSize = 1024 // in bytes
+	)
+	wsConfig, err := websocket.NewConfig(address, Origin)
+	if err != nil {
+		return false, nil, fmt.Errorf("error configuring websocket connection: %w", err)
+	}
+	if config != nil {
+		wsConfig.Dialer = &net.Dialer{Timeout: config.Timeout}
+		wsConfig.TlsConfig = &tls.Config{
+			InsecureSkipVerify: config.Insecure,
+		}
+		if config.HasTLSConfig() && config.TLS.isValid() == nil {
+			wsConfig.TlsConfig = configureTLS(wsConfig.TlsConfig, *config.TLS)
+		}
+	}
+	// Dial URL
+	ws, err := websocket.DialConfig(wsConfig)
+	if err != nil {
+		return false, nil, fmt.Errorf("error dialing websocket: %w", err)
+	}
+	defer ws.Close()
+	body = parseLocalAddressPlaceholder(body, ws.LocalAddr())
+	if body == "nostr_random_1059" {
+		var ev nostr.Event
+
+		var dest = "write-test"
+
+		ev.Kind = 1059
+		ev.CreatedAt = nostr.Timestamp(time.Now().UnixNano())
+		ev.Tags = nostr.Tags{
+			{"p", dest},
+			{"k", "1"},
+			{"expiration", strconv.FormatInt(time.Now().Add(time.Minute*3).Unix(), 10)},
+		}
+		err = ev.Sign(nostr.GeneratePrivateKey())
+		if err != nil {
+			return false, nil, fmt.Errorf("error signing event: %w", err)
+		}
+		var env nostr.EventEnvelope
+		env.Event = ev
+		env.SubscriptionID = &dest
+
+		data, err := env.MarshalJSON()
+		if err != nil {
+			return false, nil, fmt.Errorf("error marshalling event envelope: %w", err)
+		}
+		body = string(data)
+	}
+	// Write message
+	if _, err := ws.Write([]byte(body)); err != nil {
+		return false, nil, fmt.Errorf("error writing websocket body: %w", err)
+	}
+	// Read message
+	var n int
+	msg := make([]byte, MaximumMessageSize)
+	if n, err = ws.Read(msg); err != nil {
+		return false, nil, fmt.Errorf("error reading websocket message: %w", err)
+	}
+	return true, msg[:n], nil
 }
 
 // QueryWebSocket opens a websocket connection, write `body` and return a message from the server
