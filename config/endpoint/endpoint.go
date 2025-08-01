@@ -40,17 +40,18 @@ const (
 	// GatusUserAgent is the default user agent that Gatus uses to send requests.
 	GatusUserAgent = "Gatus/1.0"
 
-	TypeDNS      Type = "DNS"
-	TypeTCP      Type = "TCP"
-	TypeSCTP     Type = "SCTP"
-	TypeUDP      Type = "UDP"
-	TypeICMP     Type = "ICMP"
-	TypeSTARTTLS Type = "STARTTLS"
-	TypeTLS      Type = "TLS"
-	TypeHTTP     Type = "HTTP"
-	TypeWS       Type = "WEBSOCKET"
-	TypeSSH      Type = "SSH"
-	TypeUNKNOWN  Type = "UNKNOWN"
+	TypeDNS        Type = "DNS"
+	TypeTCP        Type = "TCP"
+	TypeSCTP       Type = "SCTP"
+	TypeUDP        Type = "UDP"
+	TypeICMP       Type = "ICMP"
+	TypeSTARTTLS   Type = "STARTTLS"
+	TypeTLS        Type = "TLS"
+	TypeHTTP       Type = "HTTP"
+	TypeWS         Type = "WEBSOCKET"
+	TypeSSH        Type = "SSH"
+	TypeNostrEvent Type = "NOSTR_EVENT"
+	TypeUNKNOWN    Type = "UNKNOWN"
 )
 
 var (
@@ -163,6 +164,8 @@ func (e *Endpoint) Type() Type {
 		return TypeTLS
 	case strings.HasPrefix(e.URL, "http://") || strings.HasPrefix(e.URL, "https://"):
 		return TypeHTTP
+	case (strings.HasPrefix(e.URL, "ws://") || strings.HasPrefix(e.URL, "wss://")) && strings.Contains(e.Body, "nostr"):
+		return TypeNostrEvent
 	case strings.HasPrefix(e.URL, "ws://") || strings.HasPrefix(e.URL, "wss://"):
 		return TypeWS
 	case strings.HasPrefix(e.URL, "ssh://"):
@@ -418,6 +421,13 @@ func (e *Endpoint) call(result *Result) {
 			wsHeaders["User-Agent"] = GatusUserAgent
 		}
 		result.Connected, result.Body, err = client.QueryWebSocket(e.URL, e.getParsedBody(), wsHeaders, e.ClientConfig)
+		if err != nil {
+			result.AddError(err.Error())
+			return
+		}
+		result.Duration = time.Since(startTime)
+	} else if endpointType == TypeNostrEvent {
+		result.Connected, result.Body, err = client.QueryNostrEvent(e.URL, e.getParsedBody(), e.ClientConfig)
 		if err != nil {
 			result.AddError(err.Error())
 			return
