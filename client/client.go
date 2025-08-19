@@ -386,20 +386,13 @@ func QueryNostrEvent(address, body string, config *Config) (connected bool, resp
 
 // QueryWebSocket opens a websocket connection, write `body` and return a message from the server
 func QueryWebSocket(address, body string, headers map[string]string, config *Config) (bool, []byte, error) {
-	const (
-		Origin = "http://localhost/"
-	)
 	dialer := websocket.Dialer{
 		HandshakeTimeout:  time.Minute,
 		EnableCompression: true,
 	}
-	if headers != nil {
-		if wsConfig.Header == nil {
-			wsConfig.Header = make(http.Header)
-		}
-		for name, value := range headers {
-			wsConfig.Header.Set(name, value)
-		}
+	reqHeaders := make(http.Header)
+	for name, value := range headers {
+		reqHeaders.Set(name, value)
 	}
 	if config != nil {
 		dialer.HandshakeTimeout = config.Timeout
@@ -411,7 +404,7 @@ func QueryWebSocket(address, body string, headers map[string]string, config *Con
 		}
 	}
 	// Dial URL
-	ws, _, err := dialer.Dial(address, http.Header{"Origin": []string{Origin}})
+	ws, _, err := dialer.Dial(address, reqHeaders)
 	if err != nil {
 		return false, nil, fmt.Errorf("error dialing websocket: %w", err)
 	}

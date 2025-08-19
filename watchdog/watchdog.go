@@ -31,7 +31,7 @@ func Monitor(cfg *config.Config) {
 	for _, endpoint := range cfg.Endpoints {
 		if endpoint.IsEnabled() {
 			// To prevent multiple requests from running at the same time, we'll wait for a little before each iteration
-			time.Sleep(777 * time.Millisecond)
+			time.Sleep(10 * time.Millisecond)
 			go monitor(endpoint, cfg.Alerting, cfg.Maintenance, cfg.Connectivity, cfg.DisableMonitoringLock, cfg.Metrics, extraLabels, ctx)
 		}
 	}
