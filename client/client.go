@@ -18,6 +18,7 @@ import (
 	"github.com/TwiN/gocache/v2"
 	"github.com/TwiN/logr"
 	"github.com/TwiN/whois"
+	"github.com/gofiber/fiber/v2/log"
 	"github.com/gorilla/websocket"
 	"github.com/ishidawataru/sctp"
 	"github.com/miekg/dns"
@@ -381,6 +382,18 @@ func QueryNostrEvent(address, body string, config *Config) (connected bool, resp
 	if err != nil {
 		return false, nil, fmt.Errorf("error reading websocket message: %w", err)
 	}
+
+	if env := nostr.ParseMessage(string(data)); env != nil {
+		switch e := env.(type) {
+		case *nostr.OKEnvelope:
+			if !e.OK {
+				log.Warnf("[client.QueryNostrEvent] Nostr relay returned an error: %s", e.Reason)
+			}
+		default:
+			log.Infof("[client.QueryNostrEvent] Received unexpected Nostr message type: %T: %s", env, string(data))
+		}
+	}
+
 	return true, data, nil
 }
 
